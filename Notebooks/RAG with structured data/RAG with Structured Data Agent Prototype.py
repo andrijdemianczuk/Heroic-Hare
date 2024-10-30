@@ -16,6 +16,7 @@
 #We could install these on the cluster, but that tightly couples the infrastructure and code. This also works better as we move to serverless.
 %pip install faker transformers sentence_transformers
 %pip install --force-reinstall databricks_vectorsearch 
+%pip install --upgrade langchain-databricks langchain-community langchain databricks-sql-connector
 
 #Restart the python interpreter
 dbutils.library.restartPython()
@@ -227,13 +228,13 @@ user_endpoint_name = f"{username}-employee-data"
 features=[
   FeatureLookup(
     table_name=f"{catalog_name}.{schema_name}.employee_feature_table",
-    lookup_key="user_id"
+    lookup_key="unique_id"
   )
 ]
 
 # Create feature spec with the lookup for features. This is important; this is what translates the structured 
 # data into something we can use to create a tool and agent from.
-employee_spec_name = f"{catalog_name}.{schema_name}.employee_spec"
+employee_spec_name = f"{catalog_name}.{schema_name}.employee_online_spec"
 try:
   fe.create_feature_spec(name=employee_spec_name, features=features)
 except Exception as e:
@@ -280,10 +281,10 @@ from typing import Union
 
 #Create a concrete class derived from LangChain's BaseTool class. The @abstractmethod is _run, which must be present to bootstrap the tool.
 class EmployeeSearchTool(BaseTool):
-    name = "Employee Feature Server"
-    description = "Use this tool when you need employee information such as City, Name, Income and if they own a car for their work."
+    name: str = "Employee Feature Server"
+    description: str = "Use this tool when you need employee information such as City, Name, Income and if they own a car for their work."
 
-    def _run(self, user_id: str):
+    def _run(self, unique_id: str):
         import requests
         import pandas as pd
         import json
@@ -296,7 +297,7 @@ class EmployeeSearchTool(BaseTool):
         headers = {'Authorization': f'Bearer {databricks_token}', 'Content-Type': 'application/json'}
         
         data = {
-            "dataframe_records": [{"unique_id": unique_id}]
+            "dataframe_records": [{"name": unique_id, "unique_id": 90}]
         }
         data_json = json.dumps(data, allow_nan=True)
         
@@ -306,7 +307,7 @@ class EmployeeSearchTool(BaseTool):
         if response.status_code != 200:
           raise Exception(f'Request failed with status {response.status_code}, {response.text}')
 
-        return response.json()['outputs'][0]['employee_record']
+        return response.json()['outputs'][0]['income']
     
     def _arun(self, user_id: str):
         #Running this tool asynchronously on PySpark clusters can have unintended consequences. Trust me. Don't do it.
@@ -314,11 +315,16 @@ class EmployeeSearchTool(BaseTool):
 
 # COMMAND ----------
 
-# Setup Open API Keys. 
-# This allows the notebook to communicate with the ChatGPT conversational model.
-# Alternately, you could configure your own LLM model and configure LangChain to refer to it.
+from langchain_databricks import ChatDatabricks
 
-OPENAI_API_KEY = dbutils.secrets.get("feature-serving", "OPENAI_API_KEY") #replace this with your openAI API key
+llm = ChatDatabricks(
+    endpoint="databricks-dbrx-instruct",
+    extra_params={"temperature": 0.01}
+)
+
+# COMMAND ----------
+
+print(llm.invoke('What is Databricks?'))
 
 # COMMAND ----------
 
@@ -331,16 +337,11 @@ tools = [
   EmployeeSearchTool()
 ]
 
+# tools = []
+
 import os
 from langchain.chat_models import ChatOpenAI
 from langchain.chains.conversation.memory import ConversationBufferWindowMemory
-
-# Initialize LLM (this example uses ChatOpenAI because later it defines a `chat` agent)
-llm = ChatOpenAI(
-    openai_api_key=OPENAI_API_KEY,
-    temperature=0,
-    model_name='gpt-3.5-turbo'
-)
 
 # Initialize conversational memory
 conversational_memory = ConversationBufferWindowMemory(
@@ -362,15 +363,13 @@ aibot = initialize_agent(
 
 # COMMAND ----------
 
-sys_msg = """Assistant is a large language model trained by OpenAI.
+sys_msg = """Assistant is a large language model trained by Databricks.
 
-Assistant is designed to be plan a vacation for the input user_id.
+Assistant is designed to answer questions about employees.
 
-When user ask to plan a travel, use the user_id to fetch the user hotel_preference.
-Use the hotel_preference from it's trusty tools to retrieve list of hotels that fit in the user's preferences from retrival from the tools.
-Use the list of hotel_ids and number of days to calculate total price and return name and total price of hotels as output.
+When a question is asked about an employee, use their name to match on. All questions must be only about the salary.
 
-Overall, Assistant is a powerful system that can help users plan a vacation and can help with a wide range of tasks and provide valuable insights and information on a wide range of topics.
+Overall, Assistant is a powerful system that can help users ask for information about the company employees and provide valuable insights and information on a wide range of topics.
 """
 
 # COMMAND ----------
@@ -384,7 +383,7 @@ aibot.agent.llm_chain.prompt = new_prompt
 
 # COMMAND ----------
 
-aibot_output = aibot('Plan a 7-day vacation to the Amalfi Coast around September for user id "a-456".')
+aibot_output = aibot('what is the income of Carolyn Martin?')
 
 # COMMAND ----------
 
