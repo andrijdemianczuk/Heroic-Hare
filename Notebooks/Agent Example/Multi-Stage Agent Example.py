@@ -4,14 +4,6 @@
 
 # COMMAND ----------
 
-username = "ademianczuk"
-catalog_name = "ademianczuk"
-schema_name = "rag_agent_prototype"
-working_dir = "/tmp/"
-
-
-# COMMAND ----------
-
 from langchain.prompts import PromptTemplate
 
 prompt_template = PromptTemplate.from_template("Tell me about a {genre} movie which {actor} is one of the actors.")
@@ -78,7 +70,7 @@ prompt_template_1 = PromptTemplate.from_template(
 )
 
 chain1 = ({"question": RunnablePassthrough()} | prompt_template_1 | llm_dbrx | StrOutputParser())
-print(chain1.invoke({"question":"Who starred in 'The Thing'? Why was it so popular?"}))
+# print(chain1.invoke({"question":"Who starred in 'The Thing'? Why was it so popular?"}))
 
 # COMMAND ----------
 
@@ -91,7 +83,7 @@ from langchain_community.vectorstores import DatabricksVectorSearch
 # docs = dvs_delta_sync.similarity_search(query)
 
 # videos = tool_yt.run(docs[0].page_content)
-videos = tool_yt.run("Terrifier Movie Trailer")
+# videos = tool_yt.run("The Thing Movie Trailer")
 
 prompt_template_2 = PromptTemplate.from_template(
     """You will get a list of videos related to the user's question. Encourage the user to watch the videos. List videos with their YouTube links.
@@ -99,7 +91,8 @@ prompt_template_2 = PromptTemplate.from_template(
     List of videos: {videos}
     """
 )
-chain2 = ({"videos": RunnablePassthrough()} | prompt_template_2 |  llm_dbrx | StrOutputParser())
+chain2 = ({"videos": RunnablePassthrough()} | prompt_template_2 | llm_dbrx | StrOutputParser())
+print(chain2.invoke({"videos":tool_yt.run("The Thing Movie Trailer")}))
 
 # COMMAND ----------
 
@@ -111,4 +104,5 @@ multi_chain = ({
     "d": chain2
 }| RunnablePassthrough.assign(d=chain2))
 
-multi_chain.invoke({"question":"Who starred in Terrifier?", "videos":videos})
+question = "What is the scariest movie of 2020?"
+multi_chain.invoke({"question":question, "videos":tool_yt.run(question)})
