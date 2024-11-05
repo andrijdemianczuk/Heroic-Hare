@@ -265,6 +265,9 @@ except Exception as e:
 
 # COMMAND ----------
 
+# Set endpoint and feature table names
+user_endpoint_name = f"{username}-employee-data"
+
 # Get endpoint status
 status = fe.get_feature_serving_endpoint(name=user_endpoint_name)
 print(status)
@@ -273,6 +276,35 @@ print(status)
 
 # MAGIC %md
 # MAGIC ## Create our support tool for structured data feature lookups
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Create an instance of our LLM as an object to call
+
+# COMMAND ----------
+
+from langchain_databricks import ChatDatabricks
+
+llm = ChatDatabricks(
+    endpoint="databricks-dbrx-instruct",
+    extra_params={"temperature": 0.01}
+)
+
+# COMMAND ----------
+
+# print(llm.invoke('What is Databricks?'))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Create our lookup agent
+
+# COMMAND ----------
+
+#Just in case we're running this notebook from this point on:
+# Set endpoint and feature table names
+user_endpoint_name = f"{username}-employee-data"
 
 # COMMAND ----------
 
@@ -296,35 +328,37 @@ class EmployeeSearchTool(BaseTool):
         
         headers = {'Authorization': f'Bearer {databricks_token}', 'Content-Type': 'application/json'}
         
-        data = {
-            "dataframe_records": [{"name": unique_id, "unique_id": 90}]
-        }
+        employees_req = []
+        employees_req.append({"unique_id": 50})
+        employees_req.append({"unique_id": 51})
+
+        # data = {
+        #     "dataframe_records": [{"unique_id": unique_id}]
+        # }
+
+        data = {"dataframe_records": employees_req}
+
         data_json = json.dumps(data, allow_nan=True)
         
         print(f"\nCalling Feature Serving Endpoint: {user_endpoint_name}\n")
         
         response = requests.request(method='POST', headers=headers, url=url, data=data_json)
+
         if response.status_code != 200:
           raise Exception(f'Request failed with status {response.status_code}, {response.text}')
+      
+        output_dict = []
+        for output in response.json()["outputs"]:
+            output_dict.append({"name": output['name'], "income": output['income']})
 
-        return response.json()['outputs'][0]['income']
+        return json.dumps(output_dict)
+
+        #Return the first record only
+        # return response.json()['outputs'][0]
     
     def _arun(self, user_id: str):
         #Running this tool asynchronously on PySpark clusters can have unintended consequences. Trust me. Don't do it.
         raise NotImplementedError("This tool does not support async")
-
-# COMMAND ----------
-
-from langchain_databricks import ChatDatabricks
-
-llm = ChatDatabricks(
-    endpoint="databricks-dbrx-instruct",
-    extra_params={"temperature": 0.01}
-)
-
-# COMMAND ----------
-
-print(llm.invoke('What is Databricks?'))
 
 # COMMAND ----------
 
@@ -367,7 +401,7 @@ sys_msg = """Assistant is a large language model trained by Databricks.
 
 Assistant is designed to answer questions about employees.
 
-When a question is asked about an employee, use their name to match on. All questions must be only about the salary.
+When a question is asked about an employee, use their name to match on. All questions must be only about the salary and whether they have a car. Make sure that income and salary are represented as a financial output with $ and Candian commas.
 
 Overall, Assistant is a powerful system that can help users ask for information about the company employees and provide valuable insights and information on a wide range of topics.
 """
@@ -383,7 +417,7 @@ aibot.agent.llm_chain.prompt = new_prompt
 
 # COMMAND ----------
 
-aibot_output = aibot('what is the income of Carolyn Martin?')
+aibot_output = aibot("97")
 
 # COMMAND ----------
 
