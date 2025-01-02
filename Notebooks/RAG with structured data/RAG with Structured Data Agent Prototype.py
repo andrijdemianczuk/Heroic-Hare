@@ -351,6 +351,9 @@ class EmployeeSearchTool(BaseTool):
         for output in response.json()["outputs"]:
             output_dict.append({"name": output['name'], "income": output['income']})
 
+        # for output in response.json()["outputs"]:
+        #     output_dict.append(output)
+
         return json.dumps(output_dict)
 
         #Return the first record only
@@ -397,6 +400,24 @@ aibot = initialize_agent(
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ##Testing our feature spec endpoint
+# MAGIC If we want to test the logic against the feature serving endpoint, this is what we need to send. Using json.dumps() converts a list or dictionary to a json object. This simulates what we're doing above, going through and iterating a list to build a result set.
+# MAGIC ```json
+# MAGIC {
+# MAGIC   "dataframe_records": [
+# MAGIC     {
+# MAGIC       "unique_id": "60"
+# MAGIC     },
+# MAGIC     {
+# MAGIC       "unique_id": "78"
+# MAGIC     }
+# MAGIC   ]
+# MAGIC }
+# MAGIC ```
+
+# COMMAND ----------
+
 sys_msg = """Assistant is a large language model trained by Databricks.
 
 Assistant is designed to answer questions about employees.
@@ -417,7 +438,7 @@ aibot.agent.llm_chain.prompt = new_prompt
 
 # COMMAND ----------
 
-aibot_output = aibot("97")
+aibot_output = aibot("What is the difference in income? Who is the highest earner?")
 
 # COMMAND ----------
 
