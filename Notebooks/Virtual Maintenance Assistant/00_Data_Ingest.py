@@ -158,6 +158,9 @@
 
 # DBTITLE 1,Depdencies
 import dlt
+from pyspark.sql import functions as F
+from pyspark.sql.functions import from_json, col
+from pyspark.sql.types import ArrayType, StructType, StructField, StringType, IntegerType, ArrayType
 
 # COMMAND ----------
 
@@ -167,15 +170,60 @@ dbutils.fs.ls("/Volumes/ademianczuk/myfixit/articles/jsons/")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC
+# MAGIC ## Read from source
 
 # COMMAND ----------
 
 #Read from the source JSON files. These were downloaded from Kaggle and previously stored in a Databricks Volume
 @dlt.table()
-def manuals():
+def manuals_raw():
   return (spark.readStream
     .format("cloudFiles")
     .option("cloudFiles.format", "json")
     .load("/Volumes/ademianczuk/myfixit/articles/jsons")
   )
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Parse the Steps and Tools columns for easy data access
+
+# COMMAND ----------
+
+#Format the columns that outline the tools and steps. This will allow us to iterate and select values independently.
+@dlt.table()
+def manuals_bronze():
+
+    #Define the toolbox schema
+    toolbox_schema = ArrayType(
+        StructType([
+            StructField("Name", StringType(), True),
+            StructField("Url", StringType(), True),
+            StructField("Thumbnail", StringType(), True)
+        ])
+    )
+
+    #Define the steps schema (This contains a nested JSON object that we'll also need to parse)
+    steps_schema = ArrayType(
+        StructType([
+            StructField("Order", IntegerType(), True),
+            StructField("Lines", ArrayType(
+                StructType([
+                    StructField("Text", StringType(), True)
+                ])), True),
+            StructField("Text_raw", StringType(), True),
+            StructField("Images", ArrayType(StringType()), True),
+            StructField("StepId", IntegerType(), True),
+            StructField("Tools_extracted", ArrayType(StringType()), True)
+        ])
+    )
+
+    #Extract and parse the columns based on the schemas and ancestor parent category
+    df = spark.read.table("LIVE.manuals_raw")
+    df_parsed = (df.withColumn("Toolbox", from_json(col("Toolbox"), toolbox_schema))
+                 .withColumn("Steps", from_json(col("Steps"), steps_schema))
+                 .withColumn("AncestorsArray", F.from_json(F.col("Ancestors"), ArrayType(StringType())))
+                 .withColumn("Parent_Category", F.expr("AncestorsArray[size(AncestorsArray) - 2]"))
+                )
+
+    return df_parsed
