@@ -158,8 +158,10 @@
 
 # DBTITLE 1,Depdencies
 import dlt
+import pandas as pd
+
 from pyspark.sql import functions as F
-from pyspark.sql.functions import from_json, col, when
+from pyspark.sql.functions import from_json, col, when, pandas_udf
 from pyspark.sql.types import ArrayType, StructType, StructField, StringType, IntegerType, ArrayType
 
 # COMMAND ----------
@@ -230,12 +232,32 @@ def manuals_bronze():
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ##Coalesce the steps into a cleaned column without the extra formatting.
+
+# COMMAND ----------
+
 @dlt.table
 def manuals_silver():
+
+    #Create a user-defined function to coalesce the steps into a single body of text based on the 'Order' key.
+    #The Pandas UDF needs to be within context of the dlt table. Otherwise the table will re-materialize recursively, thus wasting time and resources.
+    
+    @pandas_udf(StringType())
+    def coalesce_steps_pandas_udf(steps_series: pd.Series) -> pd.Series:
+        def process_steps(steps):
+            
+            # Parse and process the steps. Sort by the 'Order' key before joining the elements.
+            sorted_steps = sorted(steps, key=lambda x: int(x['Order']))
+            return " ".join(step["Text_raw"] for step in sorted_steps)
+        
+        #Apply processing to each row
+        return steps_series.apply(process_steps)
     
     #Source the upstream table as a materialization
     df = (spark.readStream.table("LIVE.manuals_bronze")
           .withColumn("Subject", when(col("Subject")=="" , "Generic").otherwise(col("Subject")))
           )
+    df = df.withColumn("coalesced_steps", coalesce_steps_pandas_udf(df["Steps"]))
     
     return df

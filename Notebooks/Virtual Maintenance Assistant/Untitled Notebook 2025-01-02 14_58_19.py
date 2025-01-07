@@ -73,3 +73,34 @@ df = (df.withColumn("Subject",
 # COMMAND ----------
 
 display(df.groupBy("Subject").count())
+
+# COMMAND ----------
+
+df = spark.table("ademianczuk.myfixit.manuals_silver")
+
+# COMMAND ----------
+
+display(df)
+
+# COMMAND ----------
+
+from pyspark.sql.functions import pandas_udf
+from pyspark.sql.types import StringType
+import pandas as pd
+
+#using a pandas udf
+@pandas_udf(StringType())
+def coalesce_steps_pandas_udf(steps_series: pd.Series) -> pd.Series:
+    def process_steps(steps):
+        # Parse and process the steps
+        sorted_steps = sorted(steps, key=lambda x: int(x['Order']))
+        return " ".join(step["Text_raw"] for step in sorted_steps)
+    
+    #Apply processing to each row
+    return steps_series.apply(process_steps)
+
+#Apply the Pandas UDF to create the new column
+df = df.withColumn("coalesced_steps", coalesce_steps_pandas_udf(df["Steps"]))
+
+#Show the result
+df.select("coalesced_steps").show(truncate=False)
