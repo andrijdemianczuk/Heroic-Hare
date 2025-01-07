@@ -161,13 +161,8 @@ import dlt
 import pandas as pd
 
 from pyspark.sql import functions as F
-from pyspark.sql.functions import from_json, col, when, pandas_udf
+from pyspark.sql.functions import from_json, col, when, pandas_udf, concat, lit
 from pyspark.sql.types import ArrayType, StructType, StructField, StringType, IntegerType, ArrayType
-
-# COMMAND ----------
-
-#Verify the presence of the source files
-dbutils.fs.ls("/Volumes/ademianczuk/myfixit/articles/jsons/")
 
 # COMMAND ----------
 
@@ -260,4 +255,16 @@ def manuals_silver():
           )
     df = df.withColumn("coalesced_steps", coalesce_steps_pandas_udf(df["Steps"]))
     
+    return df
+
+# COMMAND ----------
+
+#Add the title of the article for context-relevant metadata. We will be enriching this later when we start building our our agents and experts.
+
+@dlt.table
+def manuals_silver_rag_prep():
+
+    df = spark.readStream.table("LIVE.manuals_silver")
+    df = (df.withColumn("article", concat(lit("Title: "), df["Title"], lit('\r\n'), lit("Steps: "), df["coalesced_steps"])))
+
     return df
