@@ -159,7 +159,7 @@
 # DBTITLE 1,Depdencies
 import dlt
 from pyspark.sql import functions as F
-from pyspark.sql.functions import from_json, col
+from pyspark.sql.functions import from_json, col, when
 from pyspark.sql.types import ArrayType, StructType, StructField, StringType, IntegerType, ArrayType
 
 # COMMAND ----------
@@ -219,7 +219,7 @@ def manuals_bronze():
     )
 
     #Extract and parse the columns based on the schemas and ancestor parent category
-    df = spark.read.table("LIVE.manuals_raw")
+    df = spark.readStream.table("LIVE.manuals_raw")
     df_parsed = (df.withColumn("Toolbox", from_json(col("Toolbox"), toolbox_schema))
                  .withColumn("Steps", from_json(col("Steps"), steps_schema))
                  .withColumn("AncestorsArray", F.from_json(F.col("Ancestors"), ArrayType(StringType())))
@@ -227,3 +227,15 @@ def manuals_bronze():
                 )
 
     return df_parsed
+
+# COMMAND ----------
+
+@dlt.table
+def manuals_silver():
+    
+    #Source the upstream table as a materialization
+    df = (spark.readStream.table("LIVE.manuals_bronze")
+          .withColumn("Subject", when(col("Subject")=="" , "Generic").otherwise(col("Subject")))
+          )
+    
+    return df

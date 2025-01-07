@@ -55,8 +55,21 @@ display(df_with_category)
 
 # COMMAND ----------
 
-display(df_with_category.filter(df_with_category.Parent_Category == "Skills"))
+df = spark.table("ademianczuk.myfixit.manuals_bronze")
 
 # COMMAND ----------
 
+display(df.groupBy("Subject").count())
 
+# COMMAND ----------
+
+from pyspark.sql.functions import col, when
+
+#Fix Generic Subject
+df = (df.withColumn("Subject",
+       when(col("Subject")=="" , "Generic")
+          .otherwise(col("Subject"))))
+
+# COMMAND ----------
+
+display(df.groupBy("Subject").count())
