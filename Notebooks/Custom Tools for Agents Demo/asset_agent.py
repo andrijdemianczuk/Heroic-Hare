@@ -11,7 +11,7 @@ from databricks_langchain import (
     ChatDatabricks,
     UCFunctionToolkit,
 )
-from databricks_langchain.genie import GenieAgent
+# from databricks_langchain.genie import GenieAgent
 
 #Langchain tools (langraph is our agent lib)
 from langchain_core.runnables import RunnableLambda
