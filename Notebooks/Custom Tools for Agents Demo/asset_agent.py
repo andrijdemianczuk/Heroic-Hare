@@ -21,7 +21,6 @@ from langgraph.prebuilt import create_react_agent
 from langchain.agents import AgentType, initialize_agent, agent
 from langchain.tools import Tool
 from langchain.tools import BaseTool
-# from langchain.chat_models import ChatOpenAI
 from langchain.chains.conversation.memory import ConversationBufferWindowMemory
 
 #MLflow stuff
@@ -122,21 +121,25 @@ class SearchAssetsTool(BaseTool):
     def _arun(self, *args, **kwargs):
         raise NotImplementedError("Async not supported.")
 
+#Specify what tools are available in the toolbox
 weather_tools = [
     FetchWeatherTool(),
     SearchArxivTool(),
 ]
 
+#A good description so the supervisor knows what the node agent does and is responsible for.
 weatherdoc_agent_description = (
     "The Weather and Document agent specializes in retrieving weather (temperature) information from known coordinates. This agent can also retrieve documents from arxiv with a keyword search. This agent focuses on returning useful information to the prompter for weather and research articles. It can have internal conversations to get the most complete infomration from it's tools.",
 )
 
+#Not directly used at this time, but handy to have for conversation tracking in the future.
 weather_doc_conversational_memory = ConversationBufferWindowMemory(
     memory_key='chat_history',
     k=5,
     return_messages=True
 )
 
+#Create an instance of the agent.
 weatherdoc_bot = initialize_agent(
     tools=weather_tools,
     llm=llm,
